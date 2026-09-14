@@ -1,0 +1,23 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+websockets==12.0
+numpy==1.24.3
+pydub==0.25.1
+python-dotenv==1.0.0
+scipy==1.11.4
+
+# 首次启动自动下载模型时用到
+requests>=2.31.0
+
+# sherpa-onnx 纯 C++ ONNX 推理，不需要 PyTorch
+sherpa-onnx>=1.10.0
+
+# 降噪（默认关闭，ENABLE_NOISE=false）
+noisereduce>=2.0.0
+
+# VAD：缺了它 vad.is_available 恒为 False，has_speech 恒为真，
+# 第二遍标点修正就退化成"每 30 秒硬切一次"，而且没有任何报错
+webrtcvad>=2.0.10
+
+# 桌面窗口（launcher.py 依赖，原来漏了）
+pywebview>=4.4

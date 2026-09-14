@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实时语音识别系统</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22262f;
+    --border: #2a2e3a;
+    --text: #e4e6eb;
+    --text2: #8b8fa3;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --radius: 10px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden;
+  }
+  .app { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+  /* header */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .header .brand { display: flex; align-items: center; gap: 10px; }
+  .header .brand .dot {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--text2); transition: all .3s;
+  }
+  .header .brand .dot.rec { background: var(--red); box-shadow: 0 0 10px var(--red); animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .header .brand .dot.warn { background: var(--amber); box-shadow: 0 0 10px var(--amber); animation: blink .5s infinite; }
+  .header .brand h1 { font-size: 16px; font-weight: 600; }
+  .header .brand span { font-size: 11px; color: var(--text2); }
+
+  .btn {
+    height: 34px; padding: 0 14px; border: 1px solid var(--border); border-radius: 7px;
+    background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .15s; white-space: nowrap;
+  }
+  .btn:hover { background: #2d313e; border-color: #3d4252; }
+  .btn:disabled { opacity: .35; pointer-events: none; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent2); }
+  .btn.danger { border-color: var(--red); color: var(--red); background: transparent; }
+  .btn.danger:hover { background: var(--red); color: #fff; }
+
+  /* panels */
+  .panels { flex: 1; display: flex; gap: 1px; background: var(--border); min-height: 0; }
+  .panel {
+    flex: 1; background: var(--surface); display: flex; flex-direction: column; min-width: 0;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 12px;
+  }
+  .panel-head .role { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  .badge { padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+  .badge.agent { background: rgba(99,102,241,.15); color: #818cf8; }
+  .badge.client { background: rgba(34,197,94,.15); color: #4ade80; }
+  .badge.warn {
+    background: rgba(239,68,68,.2); color: var(--red);
+    display: none; animation: blink .6s infinite;
+  }
+  .badge.warn.show { display: inline-block; }
+  .panel-head .meta { font-size: 11px; color: var(--text2); white-space: nowrap; }
+
+  /* text area */
+  .panel-body { flex: 1; overflow-y: auto; padding: 16px 20px 8px; }
+  .panel-body .text { font-size: 15px; line-height: 1.9; white-space: pre-wrap; word-break: break-word; }
+  .panel-body .text.placeholder { color: var(--text2); font-size: 13px; }
+
+  /* waveform */
+  .wave-wrap {
+    padding: 6px 20px 8px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: rgba(0,0,0,.18);
+  }
+  .wave-wrap .wave-label { font-size: 10px; color: var(--text2); margin-bottom: 2px; }
+  .wave-wrap canvas { width: 100%; height: 64px; display: block; border-radius: 4px; }
+
+  /* footer */
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 24px; border-top: 1px solid var(--border); flex-shrink: 0;
+    font-size: 12px; color: var(--text2); gap: 10px; flex-wrap: wrap;
+  }
+  .footer .left { display: flex; align-items: center; gap: 16px; }
+  .footer label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .footer input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; }
+  .footer input[type=text] {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; width: 160px;
+  }
+
+  /* settings panel */
+  .settings-panel {
+    border-top: 1px solid var(--border); padding: 10px 24px; flex-shrink: 0;
+    display: none; gap: 20px; align-items: center; flex-wrap: wrap; font-size: 12px;
+  }
+  .settings-panel.show { display: flex; }
+  .settings-panel .row { display: flex; align-items: center; gap: 7px; }
+  .settings-panel input[type=range] { width: 100px; accent-color: var(--accent); }
+  .settings-panel .val { color: var(--accent2); font-weight: 600; min-width: 30px; }
+
+  /* volume bar in panel head */
+  .vol-bar {
+    height: 6px; border-radius: 3px; background: var(--border);
+    flex: 1; max-width: 80px; min-width: 40px; overflow: hidden;
+  }
+  .vol-bar .fill {
+    height: 100%; border-radius: 3px; background: var(--green);
+    transition: width .08s linear;
+  }
+  .vol-bar .fill.high { background: var(--amber); }
+  .vol-bar .fill.peak { background: var(--red); }
+
+  /* activity dot */
+  .act-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border); transition: background .08s;
+    flex-shrink: 0;
+  }
+  .act-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+  /* format indicator */
+  .fmt-ind {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    background: var(--surface2); color: var(--text2); white-space: nowrap;
+  }
+  .fmt-ind.stereo { color: var(--green); }
+  .fmt-ind.mono { color: var(--amber); }
+
+  /* device selector */
+  .dev-sel {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 8px; font-size: 12px; max-width: 180px;
+  }
+
+  /* toast */
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(239,68,68,.95); color: #fff;
+    padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    pointer-events: none; opacity: 0; transition: opacity .3s;
+    z-index: 100; box-shadow: 0 8px 30px rgba(239,68,68,.4);
+    max-width: 80vw; text-align: center;
+  }
+  .toast.show { opacity: 1; }
+  .toast.ok { background: rgba(34,197,94,.95); box-shadow: 0 8px 30px rgba(34,197,94,.4); }
+
+  /* 设备配置提示 */
+  .dev-hint {
+    font-size: 11px; color: var(--amber); display: none; max-width: 460px;
+  }
+  .dev-hint.show { display: inline; }
+
+  #fileInput { display: none; }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="brand">
+      <div class="dot" id="statusDot"></div>
+      <div>
+        <h1>语音识别系统</h1>
+        <span>sherpa-onnx · SenseVoice</span>
+      </div>
+    </div>
+    <div class="actions" style="display:flex;gap:6px;">
+      <button class="btn primary" id="btnRecord">开始录音</button>
+      <button class="btn danger" id="btnStop" disabled>停止</button>
+      <button class="btn" id="btnUpload">上传音频</button>
+      <button class="btn" id="btnClear">清空</button>
+      <button class="btn" id="btnSwap" disabled>交换声道</button>
+      <input type="file" id="fileInput" accept="audio/*">
+    </div>
+  </div>
+
+  <div class="panels">
+    <!-- agent -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="role"><span class="badge agent" id="badgeAgent">客服</span><span class="act-dot" id="actAgent"></span><span id="labelAgent">话筒</span></div>
+        <div class="vol-bar"><div class="fill" id="volAgent"></div></div>
+        <span class="badge warn" id="warnBadgeLeft">音量过大</span>
+        <div class="meta" id="metaAgent">0 字</div>
+      </div>
+      <div class="panel-body"><div class="text placeholder" id="textAgent">等待识别结果…</div></div>
+      <div class="wave-wrap"><div class="wave-label">音波</div><canvas id="waveAgent"></canvas></div>
+    </div>
+    <!-- client -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="role"><span class="badge client" id="badgeClient">客户</span><span class="act-dot" id="actClient"></span><span id="labelClient">声源</span></div>
+        <div class="vol-bar"><div class="fill" id="volClient"></div></div>
+        <span class="badge warn" id="warnBadgeRight">音量过大</span>
+        <div class="meta" id="metaClient">0 字</div>
+      </div>
+      <div class="panel-body"><div class="text placeholder" id="textClient">等待识别结果…</div></div>
+      <div class="wave-wrap"><div class="wave-label">音波</div><canvas id="waveClient"></canvas></div>
+    </div>
+  </div>
+
+  <div class="settings-panel" id="noisePanel">
+    <div class="row"><label><input type="checkbox" id="chkNoiseEnabled"> 启用降噪</label></div>
+    <div class="row">强度 <input type="range" id="rangeStrength" min="0" max="1" step="0.05" value="0.3"> <span class="val" id="valStrength">0.30</span></div>
+    <div class="row">噪音门 <input type="range" id="rangeGate" min="0" max="1" step="0.01" value="0.01"> <span class="val" id="valGate">0.01</span></div>
+  </div>
+
+  <div class="settings-panel" id="loudPanel">
+    <div class="row">音量阈值 <input type="range" id="rangeLoudThresh" min="0.10" max="0.80" step="0.05" value="0.35"> <span class="val" id="valLoudThresh">0.35</span></div>
+    <div class="row">持续帧数 <input type="range" id="rangeLoudFrames" min="3" max="20" step="1" value="8"> <span class="val" id="valLoudFrames">8</span></div>
+  </div>
+
+  <div class="footer">
+    <div class="left">
+      <span id="statusText">就绪</span>
+      <label><input type="checkbox" id="chkNoiseToggle"> 降噪设置</label>
+      <label><input type="checkbox" id="chkLoudToggle"> 音量提醒</label>
+      <span class="fmt-ind" id="fmtIndicator" title="输入设备状态">--</span>
+      <span class="dev-hint" id="devHint"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label>客服麦</label><select class="dev-sel" id="selDeviceAgent"><option value="">默认设备</option></select>
+      <label>客户源</label><select class="dev-sel" id="selDeviceClient"><option value="">默认设备</option></select>
+      <label>保存路径</label>
+      <input type="text" id="txtSaveDir" placeholder="./results">
+      <button class="btn" id="btnSaveDir" style="height:28px;font-size:12px;">保存</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ---- waveform renderer ----
+class Waveform {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.data = new Float32Array(600).fill(0); // ring buffer, ~12 seconds at 50fps
+    this.ptr = 0;
+    this.resize();
+  }
+  resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    this.canvas.width = rect.width * 2;
+    this.canvas.height = 128;
+    this.w = this.canvas.width;
+    this.h = this.canvas.height;
+    this.draw('rgba(99,102,241,.25)');
+  }
+  push(amplitude) {
+    this.data[this.ptr] = Math.min(1, amplitude);
+    this.ptr = (this.ptr + 1) % this.data.length;
+  }
+  draw(color) {
+    const ctx = this.ctx, w = this.w, h = this.h, d = this.data, len = d.length;
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = color || 'rgba(99,102,241,.6)';
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    const step = w / len;
+    const mid = h / 2;
+    for (let i = 0; i < len; i++) {
+      const idx = (this.ptr + i) % len;
+      const x = i * step;
+      const y = mid - d[idx] * (mid - 4);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // mirror
+    ctx.strokeStyle = (color || 'rgba(99,102,241,.15)').replace('.6', '.15').replace('.8', '.15');
+    ctx.beginPath();
+    for (let i = 0; i < len; i++) {
+      const idx = (this.ptr + i) % len;
+      const x = i * step;
+      const y = mid + d[idx] * (mid - 4);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+// ---- channel ASR ----
+class ChannelASR {
+  constructor(channelId, textEl, metaEl) {
+    this.channelId = channelId; this.textEl = textEl; this.metaEl = metaEl;
+    this.ws = null; this.chunkTexts = {}; this.mergeRanges = {}; this.maxChunkId = 0;
+    this.onError = null;   // 后端主动拒绝连接时回调（如采样率不匹配）
+  }
+  connect(url) {
+    this.ws = new WebSocket(url);
+    this.ws.onmessage = e => this.handle(JSON.parse(e.data));
+    this.ws.onclose = () => this.ws = null;
+    return this.ws;
+  }
+  send(data) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(data); }
+  close() { if (this.ws) { this.ws.close(); this.ws = null; } }
+
+  handle(d) {
+    if (d.type === 'error') { console.error('[asr]', d.message); if (this.onError) this.onError(d.message); return; }
+    if (d.type === 'result') { this.chunkTexts[d.chunk_id] = d.text || ''; this.maxChunkId = Math.max(this.maxChunkId, d.chunk_id); }
+    if (d.type === 'update') { this.mergeRanges[d.start_chunk + '-' + d.end_chunk] = d.text; }
+    this.render();
+  }
+  assemble() {
+    let text = '', i = 1;
+    while (i <= this.maxChunkId) {
+      let merged = false;
+      for (const [k, v] of Object.entries(this.mergeRanges)) {
+        const [s, e] = k.split('-').map(Number);
+        if (s === i) { text += v; i = e + 1; merged = true; break; }
+      }
+      if (!merged) { text += (this.chunkTexts[i] || ''); i++; }
+    }
+    text = text.replace(/([。！？])(?!\n)/g, '$1\n\n');
+    text = text.replace(/([.!?])\s+(?=[一-鿿A-Z])/g, '$1\n\n');
+    text = text.replace(/\n{3,}/g, '\n\n');
+    return text.trim();
+  }
+  render() {
+    const text = this.assemble();
+    this.textEl.textContent = text || '等待识别结果…';
+    this.textEl.className = text ? 'text' : 'text placeholder';
+    this.metaEl.textContent = text.length + ' 字';
+    this.textEl.parentElement.scrollTop = this.textEl.parentElement.scrollHeight;
+  }
+  clear() {
+    this.chunkTexts = {}; this.mergeRanges = {}; this.maxChunkId = 0;
+    this.textEl.textContent = '等待识别结果…'; this.textEl.className = 'text placeholder';
+    this.metaEl.textContent = '0 字';
+  }
+}
+
+// ---- main recorder ----
+class StereoRecorder {
+  constructor() {
+    this.key = { 0: 'agent', 1: 'client' };
+    this.ch = {
+      agent: new ChannelASR('agent', $('textAgent'), $('metaAgent')),
+      client: new ChannelASR('client', $('textClient'), $('metaClient')),
+    };
+    this.waves = {
+      agent: new Waveform($('waveAgent')),
+      client: new Waveform($('waveClient')),
+    };
+    this.recording = false; this.sessionId = null;
+    this.deviceAgent = ''; this.deviceClient = '';
+    this.noise = { enabled: false, reduction_strength: 0.3, gate_threshold: 0.01 };
+    this.loudness = { threshold: 0.35, frames: 8 };
+    this.saveDir = './results';
+    this.warnCount = 0; this.warnTimer = null;
+    this.drawTimer = null;
+    this.actTimers = {};
+    this.hasVirtualInput = false;    // 是否检测到虚拟声卡（VB-CABLE 之类）
+    this._clientAutoPicked = false;  // 是否已自动为"客户源"选过设备
+    this.init();
+  }
+
+  init() {
+    $('btnRecord').onclick = () => this.start();
+    $('btnStop').onclick = () => this.stop();
+    $('btnUpload').onclick = () => $('fileInput').click();
+    $('btnClear').onclick = () => { this.ch.agent.clear(); this.ch.client.clear(); };
+    $('btnSwap').onclick = () => this.swap();
+    $('fileInput').onchange = e => this.upload(e);
+    $('chkNoiseToggle').onchange = () => $('noisePanel').classList.toggle('show', $('chkNoiseToggle').checked);
+    $('chkNoiseEnabled').onchange = () => { this.noise.enabled = $('chkNoiseEnabled').checked; this.applyNoise(); };
+    $('rangeStrength').oninput = () => { this.noise.reduction_strength = +$('rangeStrength').value; $('valStrength').textContent = this.noise.reduction_strength.toFixed(2); this.applyNoise(); };
+    $('rangeGate').oninput = () => { this.noise.gate_threshold = +$('rangeGate').value; $('valGate').textContent = this.noise.gate_threshold.toFixed(2); this.applyNoise(); };
+    $('chkLoudToggle').onchange = () => $('loudPanel').classList.toggle('show', $('chkLoudToggle').checked);
+    $('rangeLoudThresh').oninput = () => { this.loudness.threshold = +$('rangeLoudThresh').value; $('valLoudThresh').textContent = this.loudness.threshold.toFixed(2); };
+    $('rangeLoudFrames').oninput = () => { this.loudness.frames = +$('rangeLoudFrames').value; $('valLoudFrames').textContent = this.loudness.frames; };
+    $('btnSaveDir').onclick = () => this.applySave();
+    $('txtSaveDir').onkeydown = e => { if (e.key === 'Enter') this.applySave(); };
+    $('selDeviceAgent').onchange = () => { this.deviceAgent = $('selDeviceAgent').value; this.updateDeviceHint(); };
+    $('selDeviceClient').onchange = () => { this.deviceClient = $('selDeviceClient').value; this._clientAutoPicked = true; this.updateDeviceHint(); };
+    this.populateDevices();
+    navigator.mediaDevices?.addEventListener('devicechange', () => this.populateDevices());
+    this.fetchNoise(); this.fetchSave();
+  }
+
+  // 统一约束，避免不同 constraints 导致重复权限弹窗
+  _audioConstraints(deviceId) {
+    const c = { audio: { channelCount: 1, sampleRate: 16000 } };
+    if (deviceId) c.audio.deviceId = { exact: deviceId };
+    return c;
+  }
+
+  async populateDevices() {
+    try {
+      let devices = await navigator.mediaDevices.enumerateDevices();
+      let inputs = devices.filter(d => d.kind === 'audioinput');
+      console.log('[devices] enumerateDevices:', inputs.length, 'inputs, labels:', inputs.map(d => d.label));
+      // 主动请求一次麦克风权限（页面加载时即弹出权限提示）
+      const needPerm = inputs.length === 0 || inputs.every(d => !d.label);
+      if (needPerm) {
+        console.log('[devices] requesting permission...');
+        try {
+          const tmp = await navigator.mediaDevices.getUserMedia(this._audioConstraints(''));
+          tmp.getTracks().forEach(t => t.stop());
+          devices = await navigator.mediaDevices.enumerateDevices();
+          inputs = devices.filter(d => d.kind === 'audioinput');
+          console.log('[devices] after permission:', inputs.length, 'inputs:', inputs.map(d => d.label || '(no label)'));
+        } catch(e) { console.warn('[devices] permission denied:', e.message); }
+      }
+      // 设备名：优先 label，其次 "设备 N"，兜底 deviceId 前8位
+      const labelOf = (d, i) => d.label || '设备 ' + (i + 1) + ' (' + d.deviceId.slice(0, 8) + '...)';
+      const opts = '<option value="">默认设备</option>' +
+        inputs.map((d, i) => `<option value="${d.deviceId}">${labelOf(d, i)}</option>`).join('');
+      const selA = $('selDeviceAgent'), selB = $('selDeviceClient');
+      const curA = selA.value || this.deviceAgent, curB = selB.value || this.deviceClient;
+      selA.innerHTML = opts; selB.innerHTML = opts;
+      if (curA) selA.value = curA;
+      if (curB) selB.value = curB;
+
+      // 客户声道要靠一块虚拟声卡（VB-CABLE 之类）才能拿到通话对端的声音。
+      // 检测到就自动选上——否则默认是两个声道都走默认麦克风，屏幕上是
+      // 两份一模一样的文字，录音文件也完全重复，而界面上看不出任何异常。
+      this.hasVirtualInput = inputs.some(d => this._isVirtual(d.label || ''));
+      if (!this._clientAutoPicked && !this.deviceClient) {
+        const virt = inputs.find(d => this._isVirtual(d.label || ''));
+        if (virt) {
+          this._clientAutoPicked = true;
+          this.deviceClient = virt.deviceId;
+          selB.value = virt.deviceId;
+          console.log('[devices] 客户源自动选择虚拟声卡:', virt.label);
+        }
+      }
+      this.updateDeviceHint();
+      console.log('[devices] dropdown populated:', inputs.length + 1, 'options');
+    } catch(e) { console.error('[devices] enumerateDevices failed:', e); }
+  }
+
+  _isVirtual(label) {
+    return /CABLE|VB-?Audio|Virtual|Loopback|立体声混音|Stereo Mix|虚拟/i.test(label);
+  }
+
+  updateDeviceHint() {
+    const el = $('devHint');
+    if (this.deviceAgent === this.deviceClient) {
+      el.textContent = '⚠ 客服麦与客户源是同一个设备，两栏会显示相同内容';
+      el.classList.add('show');
+    } else if (!this.hasVirtualInput) {
+      el.textContent = '⚠ 未检测到虚拟声卡，客户声道可能收不到对方声音（需装 VB-CABLE，安装包在同目录 VBCABLE_Driver_Pack45）';
+      el.classList.add('show');
+    } else {
+      el.textContent = '';
+      el.classList.remove('show');
+    }
+  }
+
+  flashAct(ch) {
+    const dot = $(ch === 'agent' ? 'actAgent' : 'actClient');
+    if (dot) dot.classList.add('on');
+    clearTimeout(this.actTimers[ch]);
+    this.actTimers[ch] = setTimeout(() => { if (dot) dot.classList.remove('on'); }, 200);
+  }
+
+  setFormat(ok) {
+    const el = $('fmtIndicator');
+    if (ok) {
+      el.textContent = '双设备就绪'; el.className = 'fmt-ind stereo';
+    } else {
+      el.textContent = '设备未就绪'; el.className = 'fmt-ind mono';
+    }
+  }
+
+  swap() {
+    const k = this.key; this.key = { 0: k[1], 1: k[0] };
+    const isAgentLeft = this.key[0] === 'agent';
+    $('labelAgent').textContent = isAgentLeft ? '话筒' : '话筒 → 客户';
+    $('labelClient').textContent = this.key[1] === 'client' ? '声源' : '声源 → 客服';
+    // swap badges
+    $('badgeAgent').textContent = isAgentLeft ? '客服' : '客户';
+    $('badgeAgent').className = 'badge ' + (isAgentLeft ? 'agent' : 'client');
+    $('badgeClient').textContent = isAgentLeft ? '客户' : '客服';
+    $('badgeClient').className = 'badge ' + (isAgentLeft ? 'client' : 'agent');
+    // move warning badge if active
+    if ($('warnBadgeLeft').classList.contains('show') || $('warnBadgeRight').classList.contains('show')) {
+      $('warnBadgeLeft').classList.remove('show');
+      $('warnBadgeRight').classList.remove('show');
+      const clientOnLeft = this.key[0] === 'client';
+      $(clientOnLeft ? 'warnBadgeLeft' : 'warnBadgeRight').classList.add('show');
+    }
+  }
+
+  setStatus(s) {
+    $('statusDot').className = 'dot' + (s === 'rec' ? ' rec' : '');
+    $('statusText').textContent = { ready: '就绪', rec: '录音中…', busy: '识别中…' }[s] || s;
+  }
+
+  // ---- volume analysis & warning ----
+  rms(f32) {
+    let sum = 0;
+    for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+    return Math.sqrt(sum / f32.length);
+  }
+
+  updateVolume(ch, f32) {
+    const vol = this.rms(f32);
+    const pct = Math.min(100, Math.round(vol * 400)); // scale for visual
+    const fill = $('vol' + (ch === 'agent' ? 'Agent' : 'Client'));
+    fill.style.width = pct + '%';
+    fill.className = 'fill' + (vol > 0.5 ? ' peak' : vol > 0.25 ? ' high' : '');
+
+    // client loudness warning
+    if (ch === 'client') {
+      if (vol > this.loudness.threshold) {
+        this.warnCount++;
+        if (this.warnCount >= this.loudness.frames) {
+          this.showWarning();
+          this.warnCount = 0;
+        }
+      } else {
+        this.warnCount = Math.max(0, this.warnCount - 2);
+      }
+    }
+  }
+
+  showWarning() {
+    const clientOnLeft = this.key[0] === 'client';
+    const badge = $(clientOnLeft ? 'warnBadgeLeft' : 'warnBadgeRight');
+    badge.classList.add('show');
+    this.toast('客户声音较大，请注意情绪引导');
+    clearTimeout(this.warnTimer);
+    this.warnTimer = setTimeout(() => {
+      badge.classList.remove('show');
+    }, 4000);
+  }
+
+  toast(msg, ok = false) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (ok ? ' ok' : '');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => t.classList.remove('show'), 4000);
+  }
+
+  // ---- recording ----
+  async start() {
+    let ac = null, streamAgent = null, streamClient = null;
+    try {
+      // 采样率必须真的是 16000。getUserMedia 的 sampleRate 约束只是"建议"，
+      // AudioContext 也可能静默回退到设备原生采样率（常见 48k）。一旦不是
+      // 16k，后端仍按 16k 解码，转写结果会变成语速变慢数倍的乱码，而且
+      // 不报任何错——所以这里必须硬校验并中止。
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      ac = new AudioCtx({ sampleRate: 16000 });
+      if (ac.sampleRate !== 16000) {
+        const actual = ac.sampleRate;
+        ac.close();
+        this.toast(`音频采样率只能拿到 ${actual}Hz（需要 16000Hz）`);
+        alert(`无法将音频采样率设为 16000Hz，当前设备给出的是 ${actual}Hz。\n\n`
+            + `继续录音会得到严重失真的识别结果，已中止。\n`
+            + `请在系统声音设置 → 录制设备 → 属性 → 高级 里，把设备采样率改为 16000Hz。`);
+        return;
+      }
+
+      // 两个声道选同一设备时共用一个流，避免争抢默认麦克风
+      const sameDevice = this.deviceAgent === this.deviceClient;
+
+      if (sameDevice) {
+        const shared = await navigator.mediaDevices.getUserMedia(
+          this._audioConstraints(this.deviceAgent));
+        streamAgent = shared;
+        streamClient = shared;
+      } else {
+        [streamAgent, streamClient] = await Promise.all([
+          navigator.mediaDevices.getUserMedia(this._audioConstraints(this.deviceAgent)),
+          navigator.mediaDevices.getUserMedia(this._audioConstraints(this.deviceClient))
+        ]);
+      }
+      this.ch.agent.clear(); this.ch.client.clear();
+      this.waves.agent.data.fill(0); this.waves.client.data.fill(0);
+      // 拿到权限后刷新设备列表（此时 label 可见）
+      this.populateDevices();
+      this.updateDeviceHint();
+      if (sameDevice) this.toast('客服麦与客户源是同一设备，两栏内容会重复');
+
+      this.sessionId = new Date().toISOString().replace(/[:.]/g, '-');
+      // 相对当前页面地址，避免写死主机端口；rate 让后端能拒绝采样率不符的连接
+      const base = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+      const qs = '&session=' + this.sessionId + '&rate=' + ac.sampleRate;
+      const wsA = this.ch.agent.connect(base + '?channel=agent' + qs);
+      const wsC = this.ch.client.connect(base + '?channel=client' + qs);
+      this.ch.agent.onError = m => this.toast(m);
+      this.ch.client.onError = m => this.toast(m);
+      // 服务端可能拒绝连接（如采样率不符）：只等 onopen 会永远挂住，
+      // 界面就卡在"录音中"且按钮无法恢复。
+      const opened = ws => new Promise((res, rej) => {
+        const prevClose = ws.onclose;
+        ws.onopen = () => res();
+        ws.onerror = () => rej(new Error('WebSocket 连接失败'));
+        ws.onclose = ev => { if (prevClose) prevClose(ev); rej(new Error('WebSocket 被服务端关闭')); };
+      });
+      await Promise.all([opened(wsA), opened(wsC)]);
+      this.recording = true;
+      $('btnRecord').disabled = true; $('btnStop').disabled = false; $('btnSwap').disabled = false;
+      this.setStatus('rec'); this.setFormat(true);
+
+      this.ac = ac;
+
+      // agent mic → key[0] role
+      this.srcAgent = this.ac.createMediaStreamSource(streamAgent);
+      this.procAgent = this.ac.createScriptProcessor(4096, 1, 1);
+      this.srcAgent.connect(this.procAgent); this.procAgent.connect(this.ac.destination);
+      this.procAgent.onaudioprocess = e => {
+        if (!this.recording) return;
+        const f32 = e.inputBuffer.getChannelData(0);
+        this.ch[this.key[0]].send(this.toPCM(f32));
+        this.updateVolume(this.key[0], f32);
+        this.waves[this.key[0]].push(this.rms(f32));
+        this.flashAct(this.key[0]);
+      };
+
+      // client source → key[1] role
+      this.srcClient = this.ac.createMediaStreamSource(streamClient);
+      this.procClient = this.ac.createScriptProcessor(4096, 1, 1);
+      this.srcClient.connect(this.procClient); this.procClient.connect(this.ac.destination);
+      this.procClient.onaudioprocess = e => {
+        if (!this.recording) return;
+        const f32 = e.inputBuffer.getChannelData(0);
+        this.ch[this.key[1]].send(this.toPCM(f32));
+        this.updateVolume(this.key[1], f32);
+        this.waves[this.key[1]].push(this.rms(f32));
+        this.flashAct(this.key[1]);
+      };
+
+      // resize waveforms
+      this.waves.agent.resize(); this.waves.client.resize();
+
+      // draw loop (~30fps)
+      this.drawTimer = setInterval(() => {
+        if (!this.recording) return;
+        this.waves.agent.draw('rgba(99,102,241,.6)');
+        this.waves.client.draw('rgba(34,197,94,.6)');
+      }, 35);
+
+      this.streamAgent = streamAgent; this.streamClient = streamClient;
+    } catch (err) {
+      console.error(err);
+      // 回滚已经拿到手的资源，否则麦克风会一直开着、AudioContext 也不会释放
+      if (streamAgent) streamAgent.getTracks().forEach(t => t.stop());
+      if (streamClient && streamClient !== streamAgent) streamClient.getTracks().forEach(t => t.stop());
+      if (ac && ac !== this.ac) { try { ac.close(); } catch(e) {} }
+      this.ch.agent.close(); this.ch.client.close();
+      const msg = (err && err.message) ? err.message : String(err);
+      alert((streamAgent ? '无法连接识别服务：' : '无法访问麦克风：') + msg);
+      this.setStatus('ready');
+    }
+  }
+
+  toPCM(f32) {
+    const a = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) { const s = Math.max(-1, Math.min(1, f32[i])); a[i] = s < 0 ? s * 0x8000 : s * 0x7FFF; }
+    return a.buffer;
+  }
+
+  stop() {
+    this.recording = false; clearInterval(this.drawTimer);
+    this.procAgent?.disconnect(); this.srcAgent?.disconnect();
+    this.procClient?.disconnect(); this.srcClient?.disconnect();
+    this.ac?.close();
+    this.streamAgent?.getTracks().forEach(t => t.stop());
+    // 两个声道如果共用同一个流，不要重复 stop
+    if (this.streamAgent !== this.streamClient) {
+      this.streamClient?.getTracks().forEach(t => t.stop());
+    }
+    this.ch.agent.close(); this.ch.client.close();
+    $('btnRecord').disabled = false; $('btnStop').disabled = true; $('btnSwap').disabled = true;
+    $('labelAgent').textContent = '话筒'; $('labelClient').textContent = '声源';
+    this.key = { 0: 'agent', 1: 'client' };
+    $('badgeAgent').textContent = '客服'; $('badgeAgent').className = 'badge agent';
+    $('badgeClient').textContent = '客户'; $('badgeClient').className = 'badge client';
+    $('warnBadgeLeft').classList.remove('show');
+    $('warnBadgeRight').classList.remove('show');
+    $('volAgent').style.width = '0%'; $('volClient').style.width = '0%';
+    $('actAgent').classList.remove('on'); $('actClient').classList.remove('on');
+    $('fmtIndicator').textContent = '--'; $('fmtIndicator').className = 'fmt-ind';
+    // draw flat line
+    this.waves.agent.data.fill(0); this.waves.client.data.fill(0);
+    this.waves.agent.draw('rgba(99,102,241,.3)'); this.waves.client.draw('rgba(34,197,94,.3)');
+    this.setStatus('ready');
+  }
+
+  // ---- upload ----
+  async upload(e) {
+    const file = e.target.files[0]; if (!file) return;
+    const data = await new Promise(r => { const rd = new FileReader(); rd.onload = () => r(rd.result); rd.readAsArrayBuffer(file); });
+    this.ch.agent.clear(); this.setStatus('busy');
+    const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/transcribe');
+    ws.onopen = () => ws.send(JSON.stringify({ file_data: Array.from(new Uint8Array(data)), file_name: file.name }));
+    ws.onmessage = e => this.ch.agent.handle(JSON.parse(e.data));
+    ws.onclose = () => this.setStatus('ready');
+    ws.onerror = () => { alert('连接失败'); this.setStatus('ready'); };
+    $('fileInput').value = '';
+  }
+
+  // ---- API helpers ----
+  async fetchNoise() {
+    try { const r = await fetch('/noise/config'); if (r.ok) { this.noise = await r.json(); this.syncNoiseUI(); } } catch {}
+  }
+  syncNoiseUI() {
+    $('chkNoiseEnabled').checked = this.noise.enabled;
+    $('rangeStrength').value = this.noise.reduction_strength;
+    $('rangeGate').value = this.noise.gate_threshold;
+    $('valStrength').textContent = this.noise.reduction_strength.toFixed(2);
+    $('valGate').textContent = this.noise.gate_threshold.toFixed(2);
+  }
+  async applyNoise() {
+    try { await fetch('/noise/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(this.noise) }); } catch {}
+  }
+  async fetchSave() {
+    try { const r = await fetch('/api/save-config'); if (r.ok) { const d = await r.json(); this.saveDir = d.save_dir; $('txtSaveDir').value = d.save_dir; } } catch {}
+  }
+  async applySave() {
+    const dir = $('txtSaveDir').value.trim(); if (!dir) return;
+    try {
+      const r = await fetch('/api/save-config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ save_dir: dir })
+      });
+      if (!r.ok) {
+        // 后端会校验目录能否创建/可写，把原因原样显示出来
+        const d = await r.json().catch(() => ({}));
+        this.toast('保存路径无效：' + (d.detail || ('HTTP ' + r.status)));
+        return;
+      }
+      const d = await r.json();
+      this.saveDir = d.save_dir; $('txtSaveDir').value = d.save_dir;
+      this.toast('保存路径已更新', true);
+    } catch (e) {
+      this.toast('无法连接后端：' + e.message);
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => new StereoRecorder());
+</script>
+</body>
+</html>
